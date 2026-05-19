@@ -1,0 +1,14 @@
+apiVersion: v2
+name: mzigo-gateway
+description: Mzigo runtime contract validation gateway
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - mzigo
+  - data-contracts
+  - streaming
+  - governance
+maintainers:
+  - name: Mzigo Platform
+    url: https://github.com/mzigo-io/mzigo

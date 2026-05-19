@@ -1,0 +1,13 @@
+apiVersion: v2
+name: mzigo-contracts
+description: Mzigo contract registry and governance control plane
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - mzigo
+  - data-contracts
+  - governance
+maintainers:
+  - name: Mzigo Platform
+    url: https://github.com/mzigo-io/mzigo

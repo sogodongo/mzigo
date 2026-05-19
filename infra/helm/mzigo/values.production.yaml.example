@@ -1,0 +1,77 @@
+# Production values example for Mzigo.
+# Copy this to values.production.yaml, fill in your environment-specific
+# values, and keep it out of source control (add to .gitignore).
+#
+# Deploy:
+#   helm upgrade --install mzigo mzigo/mzigo \
+#     --namespace mzigo \
+#     --create-namespace \
+#     --values values.production.yaml
+
+global:
+  imageTag: "0.1.0"
+
+mzigo-gateway:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  config:
+    logLevel: info
+    contracts:
+      # Increase TTL in production to reduce cache fill traffic on the contracts service.
+      cacheTtl: 60s
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: mzigo-gateway.your-cluster.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: mzigo-gateway-tls
+        hosts:
+          - mzigo-gateway.your-cluster.example.com
+  serviceMonitor:
+    enabled: true
+    labels:
+      # Match the label your Prometheus Operator uses to discover ServiceMonitors.
+      prometheus: kube-prometheus
+
+mzigo-contracts:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+mzigo-lineage:
+  replicaCount: 4   # Match partition count on mzigo.gateway.audit
+  config:
+    kafkaCommitInterval: 500
+
+mzigo-analyzer:
+  replicaCount: 2
+  resources:
+    limits:
+      memory: 2Gi   # Increase for large lineage graphs
+
+mzigo-masking:
+  replicaCount: 3
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 15

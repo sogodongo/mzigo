@@ -1,0 +1,71 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-contracts
+  labels:
+    app.kubernetes.io/name: mzigo-contracts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: contracts
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: mzigo-contracts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+    - name: metrics
+      port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+---
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-contracts
+  labels:
+    app.kubernetes.io/name: mzigo-contracts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mzigo-contracts
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+---
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-contracts
+  labels:
+    app.kubernetes.io/name: mzigo-contracts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mzigo-contracts
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+{{- end }}
+---
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-contracts
+  labels:
+    app.kubernetes.io/name: mzigo-contracts
+    app.kubernetes.io/instance: {{ .Release.Name }}
+automountServiceAccountToken: false
+{{- end }}

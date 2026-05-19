@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mzigo-gateway.fullname" . }}
+  labels:
+    {{- include "mzigo-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mzigo-gateway.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Never take all replicas down during an update.
+      # maxSurge allows one extra pod so old pods can drain gracefully.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        # Force a rollout when the configmap changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mzigo-gateway.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mzigo-gateway.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gateway
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.server.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.server.metricsPort }}
+              protocol: TCP
+          env:
+            - name: MZIGO_GATEWAY_LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: MZIGO_GATEWAY_LOG_FORMAT
+              value: {{ .Values.config.logFormat | quote }}
+            - name: MZIGO_GATEWAY_SERVER_PORT
+              value: {{ .Values.config.server.port | quote }}
+            - name: MZIGO_GATEWAY_SERVER_METRICS_PORT
+              value: {{ .Values.config.server.metricsPort | quote }}
+            - name: MZIGO_GATEWAY_SERVER_SHUTDOWN_TIMEOUT
+              value: {{ printf "%ds" .Values.config.server.shutdownTimeoutSeconds | quote }}
+            - name: MZIGO_GATEWAY_CONTRACTS_CACHE_TTL
+              value: {{ .Values.config.contracts.cacheTtl | quote }}
+            - name: MZIGO_GATEWAY_CONTRACTS_FETCH_TIMEOUT
+              value: {{ printf "%ds" .Values.config.contracts.fetchTimeoutSeconds | quote }}
+            - name: MZIGO_GATEWAY_KAFKA_MESSAGE_MAX_BYTES
+              value: {{ .Values.config.kafka.messageMaxBytes | quote }}
+            - name: MZIGO_GATEWAY_KAFKA_PRODUCER_TIMEOUT
+              value: {{ printf "%ds" .Values.config.kafka.producerTimeoutSeconds | quote }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        # Read-only root filesystem requires a writable /tmp.
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,9 @@
+apiVersion: v2
+name: mzigo-lineage
+description: Mzigo lineage service
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Mzigo Platform
+    url: https://github.com/mzigo-io/mzigo

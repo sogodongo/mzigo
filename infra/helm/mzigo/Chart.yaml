@@ -1,0 +1,44 @@
+apiVersion: v2
+name: mzigo
+description: >
+  Mzigo Streaming Data Contracts and Lineage Control Plane.
+  Umbrella chart deploying all Mzigo services as a complete platform.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - mzigo
+  - data-contracts
+  - streaming
+  - kafka
+  - lineage
+  - governance
+maintainers:
+  - name: Mzigo Platform
+    url: https://github.com/mzigo-io/mzigo
+
+dependencies:
+  - name: mzigo-gateway
+    version: "0.1.0"
+    repository: "file://../charts/gateway"
+    condition: gateway.enabled
+
+  - name: mzigo-contracts
+    version: "0.1.0"
+    repository: "file://../charts/contracts"
+    condition: contracts.enabled
+
+  - name: mzigo-lineage
+    version: "0.1.0"
+    repository: "file://../charts/lineage"
+    condition: lineage.enabled
+
+  - name: mzigo-analyzer
+    version: "0.1.0"
+    repository: "file://../charts/analyzer"
+    condition: analyzer.enabled
+
+  - name: mzigo-masking
+    version: "0.1.0"
+    repository: "file://../charts/masking"
+    condition: masking.enabled

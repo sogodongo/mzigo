@@ -1,0 +1,78 @@
+# Mzigo platform umbrella values.
+#
+# This file is the single configuration surface for a full platform deployment.
+# Override per-service values by nesting under the service key.
+#
+# Example:
+#   mzigo-gateway:
+#     replicaCount: 4
+#     resources:
+#       limits:
+#         cpu: 1000m
+
+# Global values available to all subcharts.
+global:
+  # imageTag overrides the image tag for all services simultaneously.
+  # Use this for coordinated platform version upgrades.
+  imageTag: ""
+
+  # imagePullSecrets applied to all service deployments.
+  imagePullSecrets: []
+
+# Enable/disable individual services.
+# Disable a service if you are deploying it separately or using an external
+# equivalent (e.g. a managed Marquez instance instead of the lineage worker).
+gateway:
+  enabled: true
+
+contracts:
+  enabled: true
+
+lineage:
+  enabled: true
+
+analyzer:
+  enabled: true
+
+masking:
+  enabled: true
+
+# Per-service overrides. Keys match the dependency name in Chart.yaml.
+# Only values that differ from the subchart defaults need to be specified here.
+mzigo-gateway:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+  extraEnvFrom:
+    - secretRef:
+        name: mzigo-gateway-secrets
+
+mzigo-contracts:
+  replicaCount: 2
+  extraEnvFrom:
+    - secretRef:
+        name: mzigo-contracts-secrets
+
+mzigo-lineage:
+  replicaCount: 2
+  extraEnvFrom:
+    - secretRef:
+        name: mzigo-lineage-secrets
+
+mzigo-analyzer:
+  replicaCount: 1
+  extraEnvFrom:
+    - secretRef:
+        name: mzigo-analyzer-secrets
+
+mzigo-masking:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+  extraEnvFrom:
+    - secretRef:
+        name: mzigo-masking-secrets

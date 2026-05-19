@@ -1,0 +1,16 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mzigo-gateway.fullname" . }}
+  labels:
+    {{- include "mzigo-gateway.labels" . | nindent 4 }}
+spec:
+  # minAvailable: 1 guarantees at least one gateway replica handles traffic
+  # during node drains, rolling updates, and cluster upgrades.
+  # With minReplicas: 2, this means at most one pod is unavailable at a time.
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "mzigo-gateway.selectorLabels" . | nindent 6 }}
+{{- end }}

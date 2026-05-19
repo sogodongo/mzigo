@@ -1,0 +1,85 @@
+# The lineage worker scales by Kafka partition assignment.
+# replicaCount determines how many consumer group members compete for partitions.
+# Do not exceed the number of partitions on mzigo.gateway.audit.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/mzigo-io/mzigo-lineage
+  pullPolicy: IfNotPresent
+  tag: ""
+
+serviceAccount:
+  create: true
+
+service:
+  type: ClusterIP
+  metricsPort: 9102
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# The lineage worker does not serve HTTP traffic, so HPA on CPU
+# is less meaningful than for the gateway. Scale manually based on
+# observed consumer lag in Grafana.
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+readinessProbe:
+  httpGet:
+    path: /metrics
+    port: 9102
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  failureThreshold: 3
+
+livenessProbe:
+  httpGet:
+    path: /metrics
+    port: 9102
+  initialDelaySeconds: 20
+  periodSeconds: 15
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+terminationGracePeriodSeconds: 60
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+  labels: {}
+
+config:
+  logLevel: info
+  kafkaConsumerGroup: mzigo-lineage-worker
+  openlineageNamespace: mzigo
+  kafkaCommitInterval: 100
+
+# Secret must contain:
+#   MZIGO_LINEAGE_KAFKA_BOOTSTRAP_SERVERS
+#   MZIGO_LINEAGE_OPENLINEAGE_URL
+#   MZIGO_LINEAGE_DATABASE_URL
+extraEnvFrom: []
+
+extraVolumes: []
+extraVolumeMounts: []
+nodeSelector: {}
+tolerations: []

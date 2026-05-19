@@ -1,0 +1,137 @@
+# Default values for mzigo-gateway.
+# These are production-safe defaults. Override in your environment-specific
+# values file, not here.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/mzigo-io/mzigo-gateway
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to .Chart.AppVersion
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9100
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  # Scale on CPU: the gateway is CPU-bound during schema validation.
+  targetCPUUtilizationPercentage: 70
+  # Scale on memory only if consistently near the limit.
+  targetMemoryUtilizationPercentage: 80
+
+# PodDisruptionBudget ensures at least one replica is available
+# during rolling updates and node drains.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Readiness probe waits for the contract cache to warm before
+# the pod receives traffic. The gateway refuses readiness until
+# the cache warm completes.
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  failureThreshold: 3
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Topology spread constraints distribute replicas across availability zones.
+# Requires nodes labeled with topology.kubernetes.io/zone.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: mzigo-gateway
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Graceful shutdown: Kubernetes sends SIGTERM and waits terminationGracePeriodSeconds
+# before SIGKILL. This must be longer than the gateway's configured shutdown_timeout.
+terminationGracePeriodSeconds: 45
+
+# ServiceMonitor for Prometheus Operator.
+# Requires prometheus-operator to be installed in the cluster.
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+  labels: {}
+
+# Gateway-specific configuration.
+# Sensitive values (kafka passwords, tokenization keys) are injected
+# via Kubernetes Secrets referenced in extraEnvFrom, not here.
+config:
+  logLevel: info
+  logFormat: json
+  server:
+    port: 8080
+    metricsPort: 9100
+    shutdownTimeoutSeconds: 30
+  contracts:
+    cacheTtl: 30s
+    fetchTimeoutSeconds: 3
+  kafka:
+    messageMaxBytes: 1048576
+    producerTimeoutSeconds: 5
+
+# Reference to a Secret containing:
+#   MZIGO_GATEWAY_KAFKA_BOOTSTRAP_SERVERS
+#   MZIGO_GATEWAY_CONTRACTS_SERVICE_URL
+extraEnvFrom: []
+# - secretRef:
+#     name: mzigo-gateway-secrets
+
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
