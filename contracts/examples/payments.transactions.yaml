@@ -1,0 +1,115 @@
+# Example Mzigo data contract.
+#
+# This file defines the contract for the payments.transactions topic.
+# Engineers commit contracts to their service repository and the
+# mzigo-contracts CI action validates changes before merge.
+
+apiVersion: mzigo.io/v1
+kind: DataContract
+
+metadata:
+  name: payments.transactions
+  version: 2.1.0
+  owner: payments-platform
+  contact: platform-data@example.com
+  description: >
+    Real-time transaction events produced by the payments service.
+    Consumed by fraud detection, analytics, and the ledger reconciliation job.
+
+topic:
+  name: payments.transactions
+  environment: production
+  partitions: 12
+  retention: 7d
+
+schema:
+  format: AVRO
+  compatibility: BACKWARD
+  fields:
+    - name: transaction_id
+      type: string
+      required: true
+      description: Globally unique transaction identifier (UUID v4)
+
+    - name: account_id
+      type: string
+      required: true
+      pii: true
+      masking: TOKENIZE
+      description: Internal account identifier
+
+    - name: amount_cents
+      type: long
+      required: true
+      description: Transaction amount in the smallest currency unit
+
+    - name: currency
+      type: string
+      required: true
+      constraints:
+        enum: [USD, EUR, GBP, KES, NGN]
+
+    - name: status
+      type: string
+      required: true
+      constraints:
+        enum: [INITIATED, AUTHORIZED, SETTLED, FAILED, REVERSED]
+
+    - name: card_last_four
+      type:
+        type: record
+        name: CardLastFour
+        fields:
+          - name: value
+            type: [null, string]
+            default: null
+      pii: true
+      masking: REDACT
+      description: Last four digits of card. Masked before landing in Iceberg.
+
+    - name: metadata
+      type:
+        type: map
+        values: string
+      required: false
+      description: Arbitrary producer metadata. Not indexed. Not PII-scanned.
+
+    - name: produced_at
+      type:
+        type: long
+        logicalType: timestamp-millis
+      required: true
+
+quality:
+  # These rules are evaluated by the analyzer on contract changes
+  # and by the gateway on sampled messages at runtime.
+  rules:
+    - field: amount_cents
+      rule: RANGE
+      config:
+        min: 1
+        max: 100000000  # 1M USD in cents as a sanity upper bound
+
+    - field: currency
+      rule: NOT_NULL
+
+    - field: transaction_id
+      rule: UUID_FORMAT
+
+consumers:
+  # Declared consumers are included in blast-radius analysis.
+  # Undeclared consumers are discovered via lineage tracking.
+  - name: fraud-detection-flink-job
+    team: fraud-engineering
+    type: FLINK_JOB
+    fields_used: [transaction_id, account_id, amount_cents, currency, status]
+
+  - name: analytics.transactions_daily
+    team: data-platform
+    type: ICEBERG_TABLE
+    fields_used: [transaction_id, amount_cents, currency, status, produced_at]
+
+  - name: ledger-reconciliation
+    team: finance-engineering
+    type: FLINK_JOB
+    fields_used: [transaction_id, amount_cents, currency, status, produced_at]

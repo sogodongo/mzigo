@@ -1,0 +1,46 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+
+  # Mzigo services expose /metrics on a dedicated port to keep
+  # the metrics path separate from the service API path.
+  # Port convention: service_port + 1000 for metrics.
+  - job_name: mzigo-gateway
+    static_configs:
+      - targets: ["gateway:9100"]
+    metrics_path: /metrics
+
+  - job_name: mzigo-contracts
+    static_configs:
+      - targets: ["contracts:9101"]
+    metrics_path: /metrics
+
+  - job_name: mzigo-lineage
+    static_configs:
+      - targets: ["lineage:9102"]
+    metrics_path: /metrics
+
+  - job_name: mzigo-analyzer
+    static_configs:
+      - targets: ["analyzer:9103"]
+    metrics_path: /metrics
+
+  - job_name: mzigo-masking
+    static_configs:
+      - targets: ["masking:9104"]
+    metrics_path: /metrics
+
+  - job_name: kafka
+    static_configs:
+      - targets: ["kafka:9101"]

@@ -1,0 +1,229 @@
+version: "3.9"
+
+# Local development stack for Mzigo.
+# This compose file wires together all infrastructure dependencies.
+# Service source code mounts are handled by individual service compose overrides.
+#
+# Startup order matters here: Schema Registry depends on Kafka,
+# Marquez depends on Postgres, and our services depend on all of them.
+# We use healthchecks instead of depends_on condition:service_started
+# because the latter doesn't wait for the service to be ready to serve traffic.
+
+networks:
+  mzigo-dev:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  kafka-data:
+  minio-data:
+  grafana-data:
+  prometheus-data:
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mzigo
+      POSTGRES_PASSWORD: mzigo-dev
+      POSTGRES_DB: mzigo
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mzigo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mzigo-dev
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - mzigo-dev
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      # Retention tuned for local dev: 1h keeps the topic clean without filling disk
+      KAFKA_LOG_RETENTION_MS: 3600000
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:29092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    networks:
+      - mzigo-dev
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mzigo-dev
+
+  # MinIO stands in for S3-compatible object storage.
+  # Lineage events and contract audit logs are written here locally.
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: mzigo-dev
+      MINIO_ROOT_PASSWORD: mzigo-dev-secret
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mzigo-dev
+
+  # ── Lineage Backend ─────────────────────────────────────────────────────────
+
+  # Marquez is the OpenLineage-compatible lineage server.
+  # We run it with the Postgres backend so lineage survives restarts locally.
+  marquez:
+    image: marquezproject/marquez:0.46.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    environment:
+      MARQUEZ_PORT: 5000
+      MARQUEZ_ADMIN_PORT: 5001
+      MARQUEZ_DB_HOST: postgres
+      MARQUEZ_DB_PORT: 5432
+      MARQUEZ_DB_USER: mzigo
+      MARQUEZ_DB_PASSWORD: mzigo-dev
+      MARQUEZ_DB_NAME: mzigo
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5001/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - mzigo-dev
+
+  marquez-web:
+    image: marquezproject/marquez-web:0.46.0
+    depends_on:
+      marquez:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      MARQUEZ_HOST: marquez
+      MARQUEZ_PORT: 5000
+    networks:
+      - mzigo-dev
+
+  # ── Observability ───────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+    networks:
+      - mzigo-dev
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: mzigo-dev
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - mzigo-dev
+
+  loki:
+    image: grafana/loki:2.9.4
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - mzigo-dev
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.93.0
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics from collector itself
+    volumes:
+      - ./docker/otel/config.yaml:/etc/otel/config.yaml:ro
+    command: ["--config=/etc/otel/config.yaml"]
+    networks:
+      - mzigo-dev
+
+  # ── Kafka Topic Init ────────────────────────────────────────────────────────
+
+  # One-shot container that creates the dev topics after Kafka is ready.
+  # This is cleaner than baking topic creation into the Kafka image.
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/setup/create-topics.sh"]
+    volumes:
+      - ./docker/kafka/create-topics.sh:/setup/create-topics.sh:ro
+    networks:
+      - mzigo-dev
+    restart: "no"
