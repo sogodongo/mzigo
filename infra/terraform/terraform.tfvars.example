@@ -1,0 +1,12 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# Then select an environment-specific file:
+#
+#   terraform init
+#   terraform plan -var-file=environments/staging.tfvars
+#   terraform apply -var-file=environments/staging.tfvars
+#
+# Never commit terraform.tfvars to source control.
+
+environment      = "staging"
+aws_region       = "us-east-1"
+eks_cluster_name = "your-eks-cluster-name"

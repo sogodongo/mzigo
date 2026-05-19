@@ -1,0 +1,23 @@
+# Copy to production.tfvars and fill in your values.
+# Never commit production.tfvars to source control.
+# Add to .gitignore: infra/terraform/environments/production.tfvars
+
+environment = "production"
+aws_region  = "us-east-1"
+
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+vpc_cidr           = "10.0.0.0/16"
+
+msk_kafka_version        = "3.6.0"
+msk_broker_instance_type = "kafka.m5.large"
+msk_broker_count         = 6
+msk_broker_storage_gb    = 500
+
+rds_instance_class       = "db.r6g.large"
+rds_allocated_storage_gb = 100
+rds_postgres_version     = "16.1"
+
+eks_cluster_name = "mzigo-production"
+
+lineage_retention_days = 90
+audit_retention_days   = 365
