@@ -1,0 +1,38 @@
+# CODEOWNERS
+#
+# Defines required reviewers for changes to each area of the codebase.
+# GitHub enforces these rules on pull requests when branch protection
+# requires CODEOWNERS review.
+#
+# Format: pattern  owner [owner ...]
+# Patterns follow .gitignore syntax. Last matching rule wins.
+
+# Default: platform team reviews anything not covered by a specific rule.
+*                               @sogodongo
+
+# Runtime services: require platform team review on all changes.
+services/gateway/               @sogodongo
+services/masking/               @sogodongo
+
+# Governance services
+services/contracts/             @sogodongo
+services/lineage/               @sogodongo
+services/analyzer/              @sogodongo
+
+# Catalog UI
+services/catalog/               @sogodongo
+
+# SDK: changes here affect every downstream producer.
+sdk/                            @sogodongo
+
+# Infrastructure: require explicit review for all infra changes.
+infra/                          @sogodongo
+
+# Contract definitions: the owning team must review their own contracts.
+contracts/                      @sogodongo
+
+# CI/CD: any change to workflows requires platform team review.
+.github/workflows/              @sogodongo
+
+# Architecture decisions: reviewed by platform leads.
+docs/architecture/adr/          @sogodongo
